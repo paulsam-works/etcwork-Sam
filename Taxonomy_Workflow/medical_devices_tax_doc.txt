@@ -1,0 +1,48 @@
+A medical device taxonomy can be structured in several ways, most commonly using a combination of risk-based classification (e.g., by regulatory bodies like the FDA or EU MDR) and functional or specialty-based categories. 
+I. Risk-Based Classification (FDA/CDSCO/EU MDR Model)
+This is the primary regulatory taxonomy, categorizing devices based on the potential risk they pose to the patient/user. 
+Class I / Class A (Lowest Risk): General controls are sufficient to ensure safety and effectiveness.
+Examples:
+Bandages, wound dressings
+Manual stethoscopes, tongue depressors
+Hospital beds, non-electric wheelchairs
+Reusable surgical instruments (Class Ir in EU)
+Specimen transport media
+Class II / Class B (Moderate/Low-Moderate Risk): General controls are insufficient, requiring special controls or performance standards.
+Examples:
+Syringes, hypodermic needles
+Blood pressure cuffs/monitors
+Catheters, infusion pumps
+Diagnostic ultrasound equipment
+Surgical gloves
+Class III / Class C & D (Highest Risk): Devices that support or sustain human life, are implanted long-term, or present a potential unreasonable risk of illness or injury.
+Examples:
+Pacemakers, artificial heart valves
+Implanted prosthetics (e.g., breast implants, orthopedic implants)
+Defibrillators
+High-frequency ventilators
+Aneurysm clips 
+II. Specialty or Functional Area Taxonomy
+Devices can also be categorized by the medical specialty they are used in or their function. 
+Anesthesiology & Respiratory: Anesthesia machines, ventilators, oxygen masks, nebulizers
+Cardiovascular: Pacemakers, catheters, blood pressure monitors, artificial heart valves
+Dental: Dental implants, instruments, and other related products
+Diagnostics/Imaging: X-ray machines, MRI scanners, ultrasound equipment, in vitro diagnostics (IVDs), blood glucose meters
+Gastroenterology & Urology: Endoscopes, catheters, rectal balloons
+Neurology: Neurostimulators, neurological electrodes
+Orthopedics: Artificial joints, bone fixation implants, braces, supports
+General Hospital/Surgical: Surgical instruments (scalpels, forceps), hospital beds, gloves, masks, syringes, infusion pumps 
+III. Example Hierarchical Product Taxonomy
+A practical product taxonomy for a business might combine these approaches:
+Category Level 1: Cardiovascular Devices
+Category Level 2: Diagnostic
+Product: Electrocardiogram (ECG) monitor (Class IIa/B)
+Product: Blood pressure cuff (Class IIa/B)
+Category Level 2: Therapeutic
+Product: Pacemaker (Class III/D)
+Product: Cardiovascular catheter (Class III/D, if long term/invasive)
+Category Level 1: Orthopedic Implants
+Category Level 2: Joint Replacement
+Product: Hip prosthetic (Class III/D)
+Category Level 2: Fixation Devices
+Product: Bone screws/plates (Class IIb/C) 

@@ -1,0 +1,71 @@
+{
+    "medical_device_taxonomy": {
+        "regulatory_classification": {
+            "risk-based_classification": {
+                "class_i_class_a": [
+                    "wound dressings",
+                    "tongue depressors",
+                    "hospital beds",
+                    "non-electric wheelchairs"
+                ],
+                "class_ii_class_b": {
+                    "special_controls": [
+                        "infusion pumps",
+                        "diagnostic ultrasound equipment",
+                        "surgical gloves"
+                    ],
+                    "performance_standards": []
+                },
+                "class_iii_class_c": {
+                    "highest_risk": [
+                        "implanted prosthetics",
+                        "breast implants",
+                        "orthopedic implants",
+                        "defibrillators",
+                        "high-frequency ventilators",
+                        "aneurysm clips"
+                    ]
+                }
+            }
+        },
+        "regulatory_bodies": [
+            "the FDA",
+            "EU MDR",
+            "CDSO"
+        ],
+        "functional_specialty_based_categories": {
+            "specialty_taxonomy": {
+                "devices_by_medical_specialty": [
+                    "anesthesia machines",
+                    "oxygen masks",
+                    "blood pressure monitors",
+                    "dental implants",
+                    "x-ray machines",
+                    "MRI scanners",
+                    "ultrasound equipment",
+                    "in vitro diagnostics",
+                    "blood glucose meters"
+                ]
+            },
+            "functional_taxonomy": []
+        },
+        "artificial_organ_and_implantable_devices": {
+            "artificial_heart_valves": [],
+            "implanted_prosthetics": [],
+            "breast_implants": [],
+            "orthopedic_implants": []
+        },
+        "specimen_transport_media": [],
+        "potential_risk_to_patient_user": {
+            "medical_devices_posing_risk": [
+                "artificial heart valves",
+                "implanted prosthetics",
+                "breast implants",
+                "orthopedic implants",
+                "defibrillators",
+                "high-frequency ventilators",
+                "aneurysm clips"
+            ]
+        }
+    }
+}
