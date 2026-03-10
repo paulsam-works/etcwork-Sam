@@ -1,0 +1,509 @@
+{
+  "script_name": "complex_etl_workflow.rsql",
+  "dialect": "Redshift/RSQL",
+  "layer": "Bronze/Silver/Gold",
+  "lineage": [
+    {
+      "step_id": 1,
+      "operation": "COPY",
+      "source_name": "s3://your-raw-data-bucket-name/bronze/transactions/orders/",
+      "source_type": "S3_BUCKET",
+      "target_name": "bronze_staging.stg_orders",
+      "target_type": "TABLE",
+      "logic": "Load raw orders data from S3 into a bronze staging table.",
+      "attributes": [
+        {
+          "source_attribute": "* (PARQUET)",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 2,
+      "operation": "COPY",
+      "source_name": "s3://your-raw-data-bucket-name/bronze/transactions/order_items/",
+      "source_type": "S3_BUCKET",
+      "target_name": "bronze_staging.stg_order_items",
+      "target_type": "TABLE",
+      "logic": "Load raw order items data from S3 into a bronze staging table.",
+      "attributes": [
+        {
+          "source_attribute": "* (PARQUET)",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 3,
+      "operation": "COPY",
+      "source_name": "s3://your-raw-data-bucket-name/bronze/crm/customers_dump.csv",
+      "source_type": "S3_BUCKET",
+      "target_name": "bronze_staging.stg_customers_raw",
+      "target_type": "TABLE",
+      "logic": "Load raw customer data from CSV into a bronze staging table.",
+      "attributes": [
+        {
+          "source_attribute": "* (CSV)",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 4,
+      "operation": "COPY",
+      "source_name": "s3://your-raw-data-bucket-name/bronze/pim/products_nested.json",
+      "source_type": "S3_BUCKET",
+      "target_name": "bronze_staging.stg_products_nested",
+      "target_type": "TABLE",
+      "logic": "Load raw nested JSON product data from S3 into a bronze staging table.",
+      "attributes": [
+        {
+          "source_attribute": "* (JSON)",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 5,
+      "operation": "COPY",
+      "source_name": "s3://your-raw-data-bucket-name/bronze/logs/web_server_logs.json.gz",
+      "source_type": "S3_BUCKET",
+      "target_name": "bronze_staging.stg_web_clickstream",
+      "target_type": "TABLE",
+      "logic": "Load gzipped JSON clickstream logs from S3 into a bronze staging table.",
+      "attributes": [
+        {
+          "source_attribute": "* (JSON GZIP)",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 6,
+      "operation": "INSERT",
+      "source_name": "bronze_staging.stg_customers_raw",
+      "source_type": "TABLE",
+      "target_name": "silver_layer.customers_master",
+      "target_type": "TABLE",
+      "logic": "Clean, deduplicate, and conform customer data from bronze to silver.",
+      "attributes": [
+        {
+          "source_attribute": "customer_id",
+          "target_attribute": "customer_id",
+          "transformation": "CAST(customer_id AS INT)"
+        },
+        {
+          "source_attribute": "email",
+          "target_attribute": "email",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "phone",
+          "target_attribute": "cleaned_phone",
+          "transformation": "COALESCE(NULLIF(phone, ''), 'N/A')"
+        },
+        {
+          "source_attribute": "full_address_messy",
+          "target_attribute": "city",
+          "transformation": "TRIM(SPLIT_PART(full_address_messy, ',', 2))"
+        },
+        {
+          "source_attribute": "full_address_messy",
+          "target_attribute": "country",
+          "transformation": "TRIM(SPLIT_PART(full_address_messy, ',', 3))"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "ingestion_dt",
+          "transformation": "GETDATE()"
+        }
+      ]
+    },
+    {
+      "step_id": 7,
+      "operation": "INSERT",
+      "source_name": "bronze_staging.stg_products_nested",
+      "source_type": "TABLE",
+      "target_name": "silver_layer.products_catalog",
+      "target_type": "TABLE",
+      "logic": "Standardize product categories and extract unit price from JSON.",
+      "attributes": [
+        {
+          "source_attribute": "product_id",
+          "target_attribute": "product_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "product_name",
+          "target_attribute": "product_name",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "category",
+          "target_attribute": "standardize_cat",
+          "transformation": "CASE WHEN category IN ('Cell Phones', 'Mobile Devs') THEN 'Electronics - Mobile' WHEN category IS NULL THEN 'Uncategorized' ELSE category END"
+        },
+        {
+          "source_attribute": "specs",
+          "target_attribute": "unit_price",
+          "transformation": "CAST(json_extract_path_text(specs, 'price') AS DECIMAL(10,2))"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "ingestion_dt",
+          "transformation": "GETDATE()"
+        }
+      ]
+    },
+    {
+      "step_id": 8,
+      "operation": "INSERT",
+      "source_name": "bronze_staging.stg_orders, bronze_staging.stg_order_items",
+      "source_type": "TABLE",
+      "target_name": "silver_layer.orders_enriched",
+      "target_type": "TABLE",
+      "logic": "Join orders and order items, calculate line total, and filter out test accounts.",
+      "attributes": [
+        {
+          "source_attribute": "stg_orders.order_id",
+          "target_attribute": "order_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "stg_orders.customer_id",
+          "target_attribute": "customer_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "stg_order_items.product_id",
+          "target_attribute": "product_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "stg_orders.order_date",
+          "target_attribute": "order_date",
+          "transformation": "CAST(o.order_date AS DATE)"
+        },
+        {
+          "source_attribute": "stg_order_items.quantity",
+          "target_attribute": "quantity",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "stg_order_items.unit_price",
+          "target_attribute": "unit_price",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "stg_order_items.quantity, stg_order_items.unit_price",
+          "target_attribute": "gross_sales_line_total",
+          "transformation": "(oi.quantity * oi.unit_price)"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "ingestion_dt",
+          "transformation": "GETDATE()"
+        }
+      ]
+    },
+    {
+      "step_id": 9,
+      "operation": "INSERT",
+      "source_name": "bronze_staging.stg_web_clickstream",
+      "source_type": "TABLE",
+      "target_name": "silver_layer.user_sessions",
+      "target_type": "TABLE",
+      "logic": "Sessionize user clickstream data using window functions.",
+      "attributes": [
+        {
+          "source_attribute": "cookie_id",
+          "target_attribute": "unique_session_id",
+          "transformation": "cookie_id || '-' || CAST(session_seq_id AS VARCHAR)"
+        },
+        {
+          "source_attribute": "cookie_id",
+          "target_attribute": "cookie_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "timestamp_utc",
+          "target_attribute": "session_start_utc",
+          "transformation": "MIN(timestamp_utc)"
+        },
+        {
+          "source_attribute": "timestamp_utc",
+          "target_attribute": "session_end_utc",
+          "transformation": "MAX(timestamp_utc)"
+        },
+        {
+          "source_attribute": "page_url",
+          "target_attribute": "total_pages_viewed",
+          "transformation": "COUNT(DISTINCT page_url)"
+        },
+        {
+          "source_attribute": "timestamp_utc",
+          "target_attribute": "session_duration_sec",
+          "transformation": "DATEDIFF(second, MIN(timestamp_utc), MAX(timestamp_utc))"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "ingestion_dt",
+          "transformation": "GETDATE()"
+        }
+      ]
+    },
+    {
+      "step_id": 10,
+      "operation": "INSERT",
+      "source_name": "silver_layer.products_catalog, gold_layer.dim_product",
+      "source_type": "TABLE",
+      "target_name": "tmp_dim_product",
+      "target_type": "TEMP_TABLE",
+      "logic": "Stage new products for SCD Type 1 dimension load.",
+      "attributes": [
+        {
+          "source_attribute": "products_catalog.product_id, dim_product.product_sk",
+          "target_attribute": "product_sk",
+          "transformation": "ROW_NUMBER() OVER (ORDER BY product_id) + (SELECT COALESCE(MAX(product_sk),0) FROM gold_layer.dim_product)"
+        },
+        {
+          "source_attribute": "products_catalog.product_id",
+          "target_attribute": "product_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "products_catalog.product_name",
+          "target_attribute": "product_name",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "products_catalog.standardize_cat",
+          "target_attribute": "category",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "products_catalog.unit_price",
+          "target_attribute": "current_price",
+          "transformation": "Direct Map"
+        }
+      ]
+    },
+    {
+      "step_id": 11,
+      "operation": "INSERT",
+      "source_name": "tmp_dim_product",
+      "source_type": "TEMP_TABLE",
+      "target_name": "gold_layer.dim_product",
+      "target_type": "TABLE",
+      "logic": "Load staged new products into the final dimension table.",
+      "attributes": [
+        {
+          "source_attribute": "*",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 12,
+      "operation": "CREATE_TEMP_TABLE",
+      "source_name": "silver_layer.customers_master, gold_layer.dim_customer_scd2",
+      "source_type": "TABLE",
+      "target_name": "tmp_changed_customers",
+      "target_type": "TEMP_TABLE",
+      "logic": "Identify changed customer records for SCD Type 2 processing.",
+      "attributes": [
+        {
+          "source_attribute": "customers_master.customer_id",
+          "target_attribute": "customer_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "customers_master.email",
+          "target_attribute": "email",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "customers_master.city",
+          "target_attribute": "city",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "customers_master.country",
+          "target_attribute": "country",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "dim_customer_scd2.customer_sk",
+          "target_attribute": "existing_sk_to_expire",
+          "transformation": "Direct Map"
+        }
+      ]
+    },
+    {
+      "step_id": 13,
+      "operation": "UPDATE",
+      "source_name": "tmp_changed_customers",
+      "source_type": "TEMP_TABLE",
+      "target_name": "gold_layer.dim_customer_scd2",
+      "target_type": "TABLE",
+      "logic": "Expire old SCD Type 2 records for customers with changed attributes.",
+      "attributes": [
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "is_current",
+          "transformation": "SET to FALSE"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "end_date",
+          "transformation": "SET to GETDATE()::DATE - 1"
+        }
+      ]
+    },
+    {
+      "step_id": 14,
+      "operation": "CREATE_TEMP_TABLE",
+      "source_name": "silver_layer.customers_master, gold_layer.dim_customer_scd2",
+      "source_type": "TABLE",
+      "target_name": "tmp_new_customers",
+      "target_type": "TEMP_TABLE",
+      "logic": "Identify net-new customers not present in the dimension table.",
+      "attributes": [
+        {
+          "source_attribute": "customers_master.*",
+          "target_attribute": "*",
+          "transformation": "Direct Load"
+        }
+      ]
+    },
+    {
+      "step_id": 15,
+      "operation": "INSERT",
+      "source_name": "tmp_changed_customers, tmp_new_customers, gold_layer.dim_customer_scd2",
+      "source_type": "TABLE",
+      "target_name": "gold_layer.dim_customer_scd2",
+      "target_type": "TABLE",
+      "logic": "Insert new and updated customer records as new current versions in the SCD Type 2 dimension.",
+      "attributes": [
+        {
+          "source_attribute": "customer_id, dim_customer_scd2.customer_sk",
+          "target_attribute": "customer_sk",
+          "transformation": "ROW_NUMBER() OVER (ORDER BY customer_id) + (SELECT COALESCE(MAX(customer_sk),0) FROM gold_layer.dim_customer_scd2)"
+        },
+        {
+          "source_attribute": "customer_id",
+          "target_attribute": "customer_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "email",
+          "target_attribute": "email",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "city",
+          "target_attribute": "city",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "country",
+          "target_attribute": "country",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "start_date",
+          "transformation": "GETDATE()::DATE"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "end_date",
+          "transformation": "'9999-12-31'::DATE"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "is_current",
+          "transformation": "TRUE"
+        }
+      ]
+    },
+    {
+      "step_id": 16,
+      "operation": "INSERT",
+      "source_name": "silver_layer.orders_enriched, gold_layer.dim_customer_scd2, gold_layer.dim_product",
+      "source_type": "TABLE",
+      "target_name": "gold_layer.fact_sales_transactions",
+      "target_type": "TABLE",
+      "logic": "Load sales fact table by joining enriched silver data with gold dimensions to look up surrogate keys.",
+      "attributes": [
+        {
+          "source_attribute": "orders_enriched.order_id",
+          "target_attribute": "order_id",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "orders_enriched.order_date",
+          "target_attribute": "date_key",
+          "transformation": "CAST(TO_CHAR(oe.order_date, 'YYYYMMDD') AS INT)"
+        },
+        {
+          "source_attribute": "dim_customer_scd2.customer_sk",
+          "target_attribute": "customer_sk",
+          "transformation": "COALESCE(dc.customer_sk, -1)"
+        },
+        {
+          "source_attribute": "dim_product.product_sk",
+          "target_attribute": "product_sk",
+          "transformation": "COALESCE(dp.product_sk, -1)"
+        },
+        {
+          "source_attribute": "orders_enriched.quantity",
+          "target_attribute": "quantity",
+          "transformation": "Direct Map"
+        },
+        {
+          "source_attribute": "orders_enriched.gross_sales_line_total",
+          "target_attribute": "sales_amount",
+          "transformation": "Direct Map"
+        }
+      ]
+    },
+    {
+      "step_id": 17,
+      "operation": "INSERT",
+      "source_name": "silver_layer.orders_enriched",
+      "source_type": "TABLE",
+      "target_name": "gold_layer.agg_regional_daily",
+      "target_type": "TABLE",
+      "logic": "Create a daily regional sales aggregate from the enriched orders data.",
+      "attributes": [
+        {
+          "source_attribute": "orders_enriched.order_date",
+          "target_attribute": "order_date",
+          "transformation": "Direct Map (GROUP BY)"
+        },
+        {
+          "source_attribute": "N/A",
+          "target_attribute": "country_code_simulated",
+          "transformation": "'USA'"
+        },
+        {
+          "source_attribute": "orders_enriched.order_id",
+          "target_attribute": "total_orders",
+          "transformation": "COUNT(DISTINCT order_id)"
+        },
+        {
+          "source_attribute": "orders_enriched.gross_sales_line_total",
+          "target_attribute": "total_sales",
+          "transformation": "SUM(gross_sales_line_total)"
+        }
+      ]
+    }
+  ]
+}
