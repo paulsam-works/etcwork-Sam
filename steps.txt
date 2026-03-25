@@ -1,0 +1,147 @@
+This explanation and set of implementation steps cover the architecture shown in the diagram, which demonstrates how to use AWS Lake Formation to enforce Row-Level Security (RLS) on Amazon Redshift data for both human users and automated service accounts.
+
+Diagram Explanation
+
+The diagram illustrates a secure data access flow where centralized governance (Lake Formation) dictates what data different entities can see in Redshift based on their assigned AWS IAM Role.
+
+Here is the flow broken down by component:
+
+Principals (The Requesters): on the far left are the entities requesting data.
+
+Users: Human employees who authenticate (usually via Single Sign-On) and assume an IAM Role.
+
+Automated Processes / Service Accounts: Applications running on AWS resources (like EC2 instances or Lambda functions). These resources are directly assigned an IAM Role.
+
+Key Takeaway: Lake Formation does not distinguish between a human or a machine; it only looks at the IAM Role making the request.
+
+AWS IAM Roles (The Identity):
+
+This is the bridge between the requester and their permissions.
+
+The diagram shows two distinct roles representing different access patterns:
+
+Orange Role (USCAN_App_Role): Represents an entity that should only see data for the 'USCAN' region.
+
+Blue Role (ETL_FullAccess_Role): Represents a privileged entity (like an Executive or an ETL job) that needs to see ALL data.
+
+AWS Lake Formation (The Security Brain):
+
+This is where the security logic is centrally defined and managed. It has two main components:
+
+Data Filters: These define how to restrict data. The example shows a filter named Filter_USCAN with the SQL predicate: Region = 'USCAN'.
+
+Permissions: This is the mapping layer. It attaches the filters to specific IAM roles.
+
+The Orange Path shows the USCAN_App_Role being granted SELECT permission with the Filter_USCAN applied.
+
+The Blue Path shows the ETL_FullAccess_Role being granted SELECT permission with "All access" (no filter applied), satisfying the requirement for an 'ALL' override.
+
+Data Metadata & Source (Top Right):
+
+Amazon Redshift Cluster: Holds the actual physical data in the Sales and User tables. Note that in this Lake Formation approach, the User table is used for upfront configuration (mapping users to roles) but is not queried at runtime for RLS.
+
+AWS Glue Data Catalog: Redshift shares its table definitions (metadata) with Glue so Lake Formation is aware of the tables and their columns.
+
+Query Execution & Results (Bottom Right):
+
+Amazon Redshift (Query Engine): When a query is run, Redshift intercepts it and asks Lake Formation for the requestor's permissions. Based on LF's response, Redshift applies the necessary filters transparently.
+
+Filtered Result (Orange Path): Because the USCAN_App_Role had the filter applied, it only receives records where Region = 'USCAN'.
+
+Full Result (Blue Path): Because the ETL_FullAccess_Role had "All access," it receives every record in the table.
+
+Implementation Step Bullet Points
+
+Here are the step-by-step instructions to implement the architecture shown in the diagram using AWS standard practices.
+
+Prerequisites:
+
+An Amazon Redshift Cluster with the Sales table loaded.
+
+AWS Lake Formation enabled in the same region.
+
+The Redshift cluster's associated IAM role must have permissions to write to the Glue Data Catalog.
+
+Step 1: Expose Redshift Tables to Lake Formation
+
+Connect to your Redshift cluster as a superuser.
+
+Create a Redshift Datashare to expose the relevant schema and tables.
+
+code
+SQL
+download
+content_copy
+expand_less
+CREATE DATASHARE sales_rls_share;
+GRANT USAGE ON SCHEMA public TO DATASHARE sales_rls_share;
+GRANT SELECT ON TABLE public.Sales TO DATASHARE sales_rls_share;
+
+Grant usage of this datashare to your own AWS account ID so it is visible to Glue.
+
+code
+SQL
+download
+content_copy
+expand_less
+GRANT USAGE ON DATASHARE sales_rls_share TO ACCOUNT '<your-aws-account-id>';
+
+In the Redshift Console, navigate to Datashares, accept the share, and map it to a Glue Data Catalog Database (e.g., name it redshift_shared_db).
+
+Step 2: Create IAM Roles for Access Patterns
+
+In the IAM Console, create distinct IAM Roles that correspond to the different levels of access required (referencing your original User table's logic).
+
+Create a role for restricted access (e.g., USCAN_App_Role).
+
+Create a role for full access (e.g., ETL_FullAccess_Role or Executive_Role).
+
+Self-Service/Automation Note: Ensure these roles have trust policies allowing the necessary entities (human SSO users, EC2 instances, or Lambda functions) to assume them.
+
+Step 3: Define Lake Formation Data Filters (The Security Logic)
+
+Go to the Lake Formation console -> Data filters.
+
+Click Create new filter.
+
+Select the Glue database created in Step 1 (redshift_shared_db) and the Sales table.
+
+Provide a name (e.g., Filter_Region_USCAN).
+
+In the Row-filter expression box, enter the SQL predicate: Region = 'USCAN' (ensure string literals are single-quoted).
+
+Repeat this step for other restricted regions (e.g., EMEA), but do NOT create a filter for the 'ALL' access pattern.
+
+Step 4: Grant Permissions to IAM Roles (The Mapping)
+
+Go to Lake Formation console -> Data lake permissions.
+
+Click Grant.
+
+For the Restricted Role (Orange Path):
+
+Under Principals, select IAM users and roles, and choose the USCAN_App_Role.
+
+Under LF Tags or Catalog resources, select the Sales table.
+
+Under Data filters, choose the specific filter you created: Filter_Region_USCAN.
+
+Under Permissions, select Select.
+
+For the Full Access Role (Blue Path):
+
+Click Grant again.
+
+Under Principals, select the ETL_FullAccess_Role.
+
+Under Catalog resources, select the Sales table.
+
+Under Data filters, select All data access (this is crucial for the override).
+
+Under Permissions, select Select.
+
+Step 5: Verification
+
+Configure a query tool (like Athena or a BI tool connecting via Redshift Spectrum) to use the USCAN_App_Role. Run SELECT * FROM redshift_shared_db.Sales and verify only USCAN data is returned.
+
+Switch the tool to use the ETL_FullAccess_Role. Run the same query and verify all data is returned.
