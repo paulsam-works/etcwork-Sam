@@ -1,0 +1,34 @@
+# ==========================================================
+# Redshift ETL Configuration
+# ==========================================================
+
+aws:
+  # The S3 bucket where raw files sit (e.g., s3://my-datalake-bucket)
+  s3_base_path: "s3://your-raw-data-bucket-name/bronze"
+  # The IAM Role ARN that Redshift assumes to read from S3
+  iam_role_arn: "arn:aws:iam::123456789012:role/MyRedshiftS3ReadOnlyRole"
+  # Redshift Connection Details
+  redshift_host: "your-redshift-cluster.xxxxxx.us-east-1.redshift.amazonaws.com"
+  redshift_port: 5439
+  redshift_db: "dev"
+  redshift_user: "awsuser"
+  # NOTE: Password should ideally be loaded from AWS Secrets Manager, 
+  # but for this script example, provide it here or via env var.
+  redshift_password: "YourPassword123!"
+
+schemas:
+  bronze: "bronze_staging"
+  silver: "silver_layer"
+  gold: "gold_layer"
+
+# Dynamic table names used in the SQL script
+tables:
+  st_orders: "stg_orders"
+
+params:
+  # Sessionization threshold in minutes (for clickstream)
+  session_timeout_minutes: 30
+  # The "high date" used for currently active SCD2 records
+  future_date: "9999-12-31"
+  # The start date for initial historical loads
+  initial_load_date: "2023-01-01"
